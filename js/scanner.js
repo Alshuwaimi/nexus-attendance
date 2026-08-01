@@ -101,6 +101,11 @@ const Scanner = (function () {
       box.innerHTML = '<div class="result-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>' +
         '<div style="font-weight:800;">تم تسجيل الحضور مسبقًا اليوم</div>' +
         '<div class="text-muted" style="margin-top:6px;font-size:13px;">' + UI.escapeHtml(result.student ? result.student.FullName : '') + '</div>';
+    } else if (result.status === 'FORBIDDEN') {
+      box.className = 'card scan-result error';
+      box.innerHTML = '<div class="result-icon"><i class="fa-solid fa-lock"></i></div>' +
+        '<div style="font-weight:800;">هذا الطالب غير مسند إليك</div>' +
+        '<div class="text-muted" style="margin-top:6px;font-size:13px;">راجع المدير لو ده خطأ في التوزيع</div>';
     } else {
       box.className = 'card scan-result error';
       box.innerHTML = '<div class="result-icon"><i class="fa-solid fa-circle-xmark"></i></div>' +

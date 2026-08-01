@@ -1,27 +1,29 @@
 /**
  * ============================================================================
- * STUDENTS — search, filter, add, edit, delete, and bulk import.
+ * STUDENTS — search, filter, add, edit, delete, bulk import, and teacher
+ * assignment (a student can belong to one specific teacher, or to "ALL").
  * ============================================================================
  */
 const Students = (function () {
   let cache = [];
   let settingsCache = null;
+  let teachersCache = []; // only populated for admins (needed for the assignment dropdown)
 
   function render(root) {
     const isAdmin = Auth.isAdmin();
     root.innerHTML =
       '<div class="section-header">' +
         '<h2>قاعدة بيانات الطلاب</h2>' +
-        (isAdmin ?
-          '<div class="flex gap-1">' +
-            '<button class="btn btn-ghost" id="importBtn"><i class="fa-solid fa-file-import"></i> استيراد Excel/CSV</button>' +
-            '<button class="btn btn-gold" id="addStudentBtn"><i class="fa-solid fa-plus"></i> إضافة طالب</button>' +
-          '</div>' : '') +
+        '<div class="flex gap-1">' +
+          (isAdmin ? '<button class="btn btn-ghost" id="importBtn"><i class="fa-solid fa-file-import"></i> استيراد Excel/CSV</button>' : '') +
+          '<button class="btn btn-gold" id="addStudentBtn"><i class="fa-solid fa-plus"></i> إضافة طالب</button>' +
+        '</div>' +
       '</div>' +
       '<div class="toolbar">' +
         '<div class="search-box"><i class="fa-solid fa-magnifying-glass"></i><input class="input" id="studentSearch" placeholder="ابحث بالاسم أو الرقم أو الهاتف..."></div>' +
         '<select class="input" id="gradeFilter" style="max-width:160px;"><option value="">كل الصفوف</option></select>' +
         '<select class="input" id="groupFilter" style="max-width:140px;"><option value="">كل المجموعات</option></select>' +
+        (isAdmin ? '<select class="input" id="teacherFilter" style="max-width:180px;"><option value="">كل المعلمين</option></select>' : '') +
       '</div>' +
       '<div class="card table-wrap"><div id="studentsTableHost"></div></div>' +
       '<input type="file" id="importFile" accept=".csv" class="hidden">';
@@ -29,9 +31,10 @@ const Students = (function () {
     document.getElementById('studentSearch').addEventListener('input', debounce(loadStudents, 300));
     document.getElementById('gradeFilter').addEventListener('change', loadStudents);
     document.getElementById('groupFilter').addEventListener('change', loadStudents);
+    document.getElementById('addStudentBtn').addEventListener('click', function () { openStudentForm(null); });
 
     if (isAdmin) {
-      document.getElementById('addStudentBtn').addEventListener('click', function () { openStudentForm(null); });
+      document.getElementById('teacherFilter').addEventListener('change', loadStudents);
       document.getElementById('importBtn').addEventListener('click', function () { document.getElementById('importFile').click(); });
       document.getElementById('importFile').addEventListener('change', handleImportFile);
     }
@@ -52,16 +55,29 @@ const Students = (function () {
       if (gradeSel) settingsCache.grades.forEach(function (g) { gradeSel.innerHTML += '<option value="' + g + '">' + g + '</option>'; });
       if (groupSel) settingsCache.groups.forEach(function (g) { groupSel.innerHTML += '<option value="' + g + '">' + g + '</option>'; });
     } catch (err) { /* non-blocking */ }
+
+    if (Auth.isAdmin()) {
+      try {
+        teachersCache = await Api.call('getTeachers', {});
+        const teacherSel = document.getElementById('teacherFilter');
+        if (teacherSel) {
+          teacherSel.innerHTML += '<option value="ALL">كل المعلمين (مشتركين)</option>';
+          teachersCache.forEach(function (t) { teacherSel.innerHTML += '<option value="' + t.teacherId + '">' + t.fullName + '</option>'; });
+        }
+      } catch (err) { /* non-blocking */ }
+    }
   }
 
   async function loadStudents() {
     const host = document.getElementById('studentsTableHost');
     try {
+      const isAdmin = Auth.isAdmin();
       const payload = {
         search: document.getElementById('studentSearch').value,
         grade: document.getElementById('gradeFilter').value,
         group: document.getElementById('groupFilter').value
       };
+      if (isAdmin) payload.teacherFilter = document.getElementById('teacherFilter').value;
       cache = await Api.call('getStudents', payload);
       renderTable(host);
     } catch (err) { UI.toast(err.message, 'error'); }
@@ -75,7 +91,9 @@ const Students = (function () {
     const isAdmin = Auth.isAdmin();
     host.innerHTML =
       '<table class="data-table"><thead><tr>' +
-        '<th>الرقم</th><th>الاسم</th><th>الصف</th><th>المجموعة</th><th>ولي الأمر</th><th>هاتف ولي الأمر</th><th>الحالة</th>' +
+        '<th>الرقم</th><th>الاسم</th><th>الصف</th><th>المجموعة</th><th>ولي الأمر</th><th>هاتف ولي الأمر</th>' +
+        (isAdmin ? '<th>المعلم المسؤول</th>' : '') +
+        '<th>الحالة</th>' +
         (isAdmin ? '<th>إجراءات</th>' : '') +
       '</tr></thead><tbody>' +
       cache.map(function (s) {
@@ -87,6 +105,7 @@ const Students = (function () {
           '<td>' + UI.escapeHtml(s.Group) + '</td>' +
           '<td>' + UI.escapeHtml(s.ParentName) + '</td>' +
           '<td dir="ltr">' + UI.escapeHtml(s.ParentPhone) + '</td>' +
+          (isAdmin ? '<td>' + teacherBadge(s) + '</td>' : '') +
           '<td>' + (active ? '<span class="badge badge-success">نشط</span>' : '<span class="badge badge-muted">غير نشط</span>') + '</td>' +
           (isAdmin ? '<td><div class="row-actions">' +
             '<button title="تعديل" onclick="Students.edit(\'' + s.StudentID + '\')"><i class="fa-solid fa-pen"></i></button>' +
@@ -97,10 +116,34 @@ const Students = (function () {
       '</tbody></table>';
   }
 
+  function teacherBadge(s) {
+    const assigned = s.AssignedTeacher || 'ALL';
+    if (assigned === 'ALL') return '<span class="badge badge-muted">كل المعلمين</span>';
+    return '<span class="badge badge-warn">' + UI.escapeHtml(s.AssignedTeacherName || assigned) + '</span>';
+  }
+
   function openStudentForm(studentId) {
     const student = studentId ? cache.filter(function (s) { return s.StudentID === studentId; })[0] : null;
     const grades = settingsCache ? settingsCache.grades : [];
     const groups = settingsCache ? settingsCache.groups : [];
+    const isAdmin = Auth.isAdmin();
+
+    let assignmentField = '';
+    if (isAdmin) {
+      const currentAssigned = student ? (student.AssignedTeacher || 'ALL') : 'ALL';
+      assignmentField =
+        '<div class="field"><label>المعلم المسؤول عن الطالب</label><select class="input" id="sAssignedTeacher">' +
+          '<option value="ALL" ' + (currentAssigned === 'ALL' ? 'selected' : '') + '>كل المعلمين (مشترك)</option>' +
+          teachersCache.map(function (t) {
+            return '<option value="' + t.teacherId + '" ' + (String(currentAssigned) === String(t.teacherId) ? 'selected' : '') + '>' + UI.escapeHtml(t.fullName) + '</option>';
+          }).join('') +
+        '</select>' +
+        '<div class="text-muted" style="font-size:12px;margin-top:4px;">لو اخترت معلمًا محددًا، هذا الطالب هيظهر بس عنده هو (والمدير). لو "كل المعلمين"، هيظهر عند الجميع.</div>' +
+        '</div>';
+    } else if (!student) {
+      // A teacher registering a new student themselves: locked to their own roster.
+      assignmentField = '<div class="text-muted" style="font-size:12.5px;margin-bottom:14px;"><i class="fa-solid fa-circle-info"></i> هذا الطالب هيتسجل تلقائيًا ضمن طلابك أنت فقط.</div>';
+    }
 
     UI.openModal(
       '<div class="modal-header"><h3>' + (student ? 'تعديل بيانات الطالب' : 'إضافة طالب جديد') + '</h3></div>' +
@@ -113,6 +156,7 @@ const Students = (function () {
           field('هاتف ولي الأمر', 'sParentPhone', student ? student.ParentPhone : '') +
           field('هاتف الطالب', 'sStudentPhone', student ? student.StudentPhone : '') +
         '</div>' +
+        assignmentField +
         '<div class="field"><label>ملاحظات</label><textarea class="input" id="sNotes" rows="2">' + (student ? UI.escapeHtml(student.Notes) : '') + '</textarea></div>' +
       '</div>' +
       '<div class="modal-footer">' +
@@ -131,6 +175,10 @@ const Students = (function () {
         studentPhone: document.getElementById('sStudentPhone').value.trim(),
         notes: document.getElementById('sNotes').value.trim()
       };
+      if (isAdmin) {
+        const assignedSelect = document.getElementById('sAssignedTeacher');
+        if (assignedSelect) payload.assignedTeacher = assignedSelect.value;
+      }
       if (!payload.fullName) { UI.toast('الاسم مطلوب', 'error'); return; }
       try {
         if (student) {
