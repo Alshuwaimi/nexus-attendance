@@ -16,6 +16,20 @@ const App = (function () {
     settings: { title: 'الإعدادات', sub: 'ضبط بيانات المركز والصفوف والحصص', mod: 'Settings' }
   };
 
+  // NOTE: top-level `const X = ...` in each module file does NOT attach X to
+  // `window` in a plain (non-module) script. We keep a direct reference map
+  // here instead of doing `window[meta.mod]`, which was silently undefined.
+  const MODULES = {
+    Dashboard: Dashboard,
+    Students: Students,
+    Scanner: Scanner,
+    AttendanceLog: AttendanceLog,
+    Reports: Reports,
+    Cards: Cards,
+    Teachers: Teachers,
+    Settings: Settings
+  };
+
   let currentRoute = null;
 
   function navigate(route) {
@@ -35,7 +49,7 @@ const App = (function () {
     });
 
     const root = document.getElementById('viewRoot');
-    window[meta.mod].render(root);
+    MODULES[meta.mod].render(root);
 
     document.getElementById('sidebar').classList.remove('open');
     window.location.hash = route;
