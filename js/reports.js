@@ -87,12 +87,18 @@ const Reports = (function () {
       }).join('') + '</tbody></table>';
   }
 
+  function csvEscape(val) {
+    const str = String(val === null || val === undefined ? '' : val);
+    if (/[",\n]/.test(str)) return '"' + str.replace(/"/g, '""') + '"';
+    return str;
+  }
+
   function exportCsv() {
     if (!lastData) return;
     const rows = lastData.rows;
     const header = ['StudentID', 'FullName', 'Grade', 'Present', 'Late', 'Absent', 'AttendancePct'];
     const lines = [header.join(',')].concat(rows.map(function (r) {
-      return [r.studentId, r.fullName, r.grade, r.present, r.late, r.absent, r.attendancePct].join(',');
+      return [r.studentId, r.fullName, r.grade, r.present, r.late, r.absent, r.attendancePct].map(csvEscape).join(',');
     }));
     const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
