@@ -73,6 +73,7 @@ const Settings = (function () {
       const start = document.getElementById('newSessStart').value;
       const end = document.getElementById('newSessEnd').value;
       if (!name || !start || !end) { UI.toast('أدخل اسم الحصة ووقت البداية والنهاية', 'error'); return; }
+      if (end <= start) { UI.toast('وقت النهاية لازم يكون بعد وقت البداية', 'error'); return; }
       data.sessions.push({ name: name, start: start, end: end });
       document.getElementById('newSessName').value = '';
       renderSessions();
