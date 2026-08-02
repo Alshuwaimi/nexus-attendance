@@ -90,9 +90,10 @@ const AttendanceLog = (function () {
   }
 
   async function openManualForm() {
-    if (!studentsCache.length) {
-      try { studentsCache = await Api.call('getStudents', { activeOnly: true }); } catch (e) { UI.toast(e.message, 'error'); return; }
-    }
+    // Always fetch fresh (not cached) — a student added moments ago must be
+    // selectable immediately, and the list is also role-filtered per teacher.
+    try { studentsCache = await UI.withLoader(function () { return Api.call('getStudents', { activeOnly: true }); }); } catch (e) { UI.toast(e.message, 'error'); return; }
+    if (!studentsCache.length) { UI.toast('لا يوجد طلاب متاحون لك حاليًا', 'warn'); return; }
     const sessions = settingsCache ? settingsCache.sessions : [];
     UI.openModal(
       '<div class="modal-header"><h3>تسجيل حضور / غياب يدوي</h3></div>' +
