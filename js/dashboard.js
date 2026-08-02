@@ -7,6 +7,8 @@ const Dashboard = (function () {
   let trendChart = null;
   let gradeChart = null;
   let currentRange = 'weekly';
+  let clockInterval = null; // must be cleared on re-render, otherwise every
+                              // visit to this page stacks up another timer
 
   function render(root) {
     root.innerHTML =
@@ -51,7 +53,8 @@ const Dashboard = (function () {
     });
 
     tickClock();
-    setInterval(tickClock, 1000);
+    if (clockInterval) clearInterval(clockInterval);
+    clockInterval = setInterval(tickClock, 1000);
     loadAll();
   }
 
@@ -144,5 +147,9 @@ const Dashboard = (function () {
     } catch (err) { /* silent — non-critical widget */ }
   }
 
-  return { render };
+  function onLeave() {
+    if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
+  }
+
+  return { render, onLeave };
 })();
