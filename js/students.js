@@ -224,9 +224,9 @@ const Students = (function () {
       const text = evt.target.result;
       const lines = text.split(/\r?\n/).filter(function (l) { return l.trim() !== ''; });
       if (lines.length < 2) { UI.toast('الملف فارغ أو غير صالح', 'error'); return; }
-      const headers = lines[0].split(',').map(function (h) { return h.trim().toLowerCase(); });
+      const headers = parseCsvLine(lines[0]).map(function (h) { return h.trim().toLowerCase(); });
       const students = lines.slice(1).map(function (line) {
-        const cols = line.split(',');
+        const cols = parseCsvLine(line);
         const obj = {};
         headers.forEach(function (h, i) {
           const val = (cols[i] || '').trim();
@@ -249,6 +249,33 @@ const Students = (function () {
     };
     reader.readAsText(file);
     e.target.value = '';
+  }
+
+  // Minimal quote-aware CSV line parser: handles values containing commas
+  // (e.g. free-text notes) when wrapped in double quotes, and escaped ""
+  // quotes inside a quoted field. A plain .split(',') would silently shift
+  // every column after such a value.
+  function parseCsvLine(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQuotes) {
+        if (ch === '"' && line[i + 1] === '"') { current += '"'; i++; }
+        else if (ch === '"') { inQuotes = false; }
+        else { current += ch; }
+      } else if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ',') {
+        result.push(current);
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+    result.push(current);
+    return result;
   }
 
   return { render, edit, remove };
