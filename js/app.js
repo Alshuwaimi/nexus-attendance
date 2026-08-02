@@ -37,7 +37,9 @@ const App = (function () {
     if (route === 'teachers' || route === 'settings') {
       if (!Auth.isAdmin()) route = 'dashboard';
     }
-    if (currentRoute === 'scan' && route !== 'scan') Scanner.onLeave();
+    if (currentRoute && MODULES[ROUTES[currentRoute].mod] && typeof MODULES[ROUTES[currentRoute].mod].onLeave === 'function' && currentRoute !== route) {
+      MODULES[ROUTES[currentRoute].mod].onLeave();
+    }
 
     currentRoute = route;
     const meta = ROUTES[route];
