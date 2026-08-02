@@ -6,8 +6,17 @@
 const Scanner = (function () {
   let html5QrCode = null;
   let scanning = false;
+  let isProcessing = false; // guards against html5-qrcode firing its success
+                              // callback on every video frame while a code
+                              // stays in view (was causing duplicate scans)
+  let lastCode = null;
+  let lastCodeAt = 0;
+  const RESCAN_COOLDOWN_MS = 4000; // ignore the same code again for 4s
 
   function render(root) {
+    isProcessing = false;
+    lastCode = null;
+    lastCodeAt = 0;
     root.innerHTML =
       '<div class="section-header"><h2>تسجيل الحضور عبر QR</h2></div>' +
       '<div class="scan-wrap">' +
@@ -28,6 +37,7 @@ const Scanner = (function () {
 
     document.getElementById('toggleScanBtn').addEventListener('click', toggleScan);
     document.getElementById('manualSubmitBtn').addEventListener('click', function () {
+      if (isProcessing) return; // avoid double-submit firing two requests
       const val = document.getElementById('manualQrInput').value.trim();
       if (val) { processCode(val); document.getElementById('manualQrInput').value = ''; }
     });
@@ -47,6 +57,16 @@ const Scanner = (function () {
       { facingMode: 'environment' },
       { fps: 10, qrbox: { width: 240, height: 240 } },
       function (decodedText) {
+        // html5-qrcode calls this on EVERY frame where the code is still
+        // visible (can be several times per second). Without this guard,
+        // holding a card in front of the camera fires several concurrent
+        // "record attendance" requests, which is how duplicate attendance
+        // rows for the same student/day happened before this fix.
+        const now = Date.now();
+        if (isProcessing) return;
+        if (decodedText === lastCode && (now - lastCodeAt) < RESCAN_COOLDOWN_MS) return;
+        lastCode = decodedText;
+        lastCodeAt = now;
         processCode(decodedText);
       },
       function () { /* ignore per-frame scan errors */ }
@@ -69,6 +89,7 @@ const Scanner = (function () {
   }
 
   async function processCode(code) {
+    isProcessing = true;
     const box = document.getElementById('scanResultBox');
     box.className = 'card scan-result';
     box.innerHTML = '<div class="spinner" style="border-top-color:var(--ink-700);"></div>';
@@ -84,6 +105,8 @@ const Scanner = (function () {
       box.innerHTML = '<div class="result-icon"><i class="fa-solid fa-circle-exclamation"></i></div>' +
         '<div style="font-weight:700;">تعذر تسجيل الحضور</div>' +
         '<div class="text-muted" style="margin-top:6px;font-size:13px;">' + UI.escapeHtml(err.message) + '</div>';
+    } finally {
+      isProcessing = false;
     }
   }
 
